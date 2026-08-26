@@ -49,6 +49,7 @@ v3.2 : Correction du mapping des flèches de tendance Dexcom
 #include "Langues/Langue.h"
 
 static unsigned long testWatchdog = 0;
+static unsigned long testAlimentation = 0; // Timestamp of the last successful glucose reading
 
 #define WDT_TIMEOUT_SECONDS 600 // Watchdog 10 minutes = 600 secondes
 
@@ -89,6 +90,11 @@ void setup()
   }
   LireSerial();
 
+  //Alimentation
+  analogReadResolution(12);
+  analogSetPinAttenuation(5, ADC_11db);
+  LectureVbatterie();
+
   //========== Anciens paramètres ==============
   ReadFichierParametres();
   LireSerial();
@@ -121,6 +127,7 @@ void setup()
   ArduinoOTA.begin(); // Mandatory
 
   LireSerial();
+  
 
   //======== Demande compte LibreLinkUp ou Dexcom si non défini =====================
   if (sensorType == SENSOR_LIBRE && libreEmail.length() < 4)
@@ -181,6 +188,12 @@ void loop()
       esp_task_wdt_reset(); // Reset du watchdog
       delay(1);
     }
+    
+  }
+  if (millis() - testAlimentation > 60000) // On teste la tension d'alimentation toutes les 60
+  {
+    testAlimentation = millis();
+    LectureVbatterie();
   }
 
   //======= Page HTML Brute ============

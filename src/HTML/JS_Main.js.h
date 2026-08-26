@@ -9,6 +9,7 @@ let targetHigh = 180;
 let Boucle1s = 0;
 let lastGlyUnixTime = 0;
 
+
 function polar(cx, cy, r, angle) {
     let rad = (angle - 90) * Math.PI / 180
     return {
@@ -265,6 +266,9 @@ function LoadLGlycemie() {
                 targetLow = obj.targetLow;
                 targetHigh = obj.targetHigh;
                 lastGlyUnixTime = obj.lastGlyUnixTime;
+                let TensionAlimentation = obj.TensionAlimentation;
+                let TensionAlim = TensionAlimentation / 1000;
+                GH("TensionAlimValue", TensionAlim.toFixed(2) + " V");
                 setValue(obj.GlycemieVal, obj.GlucoseUnitLabel);
                 TraceTendance(obj.TrendArrow);
                 // Display unit label if available

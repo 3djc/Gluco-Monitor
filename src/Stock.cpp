@@ -92,6 +92,10 @@ void DeserializeConfiguration(String json) {
   // Couleur affichage glycémie
   int glucoseColorInt = conf["glucoseColor"] | GLUCOSE_BLANC;
   glucoseColor = (GlucoseColor)glucoseColorInt;
+
+  // Time format
+  int timeFormatInt = conf["timeFormat"] | TIME_FORMAT_24H;
+  timeFormat = (TimeFormat)timeFormatInt;
 }
 
 String SerializeConfiguration() {
@@ -118,6 +122,8 @@ String SerializeConfiguration() {
   conf["glucoseUnit"] = (int) glucoseUnit;
   //Couleur affichage glycémie
   conf["glucoseColor"] = (int) glucoseColor;
+  //Time format
+  conf["timeFormat"] = (int) timeFormat;
   
   String Json;
   serializeJson(conf, Json);

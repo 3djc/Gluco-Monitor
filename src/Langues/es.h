@@ -26,10 +26,12 @@ inline const char *LangES = R"====(
   "WaitGluco":"Esperando glucemia",
   "ConfNul":"Configuración incompleta",
   "LoginFailed":" Sin conexión a Libreview, código HTTP: ",
+  "LoginDexFailed":" Sin conexión a Dexcom Share, código HTTP: ",
   "LastGlyco":" Última glucemia conocida: ",
   "le":" el ",
   "GlucoFailed":" Sin datos de glucemia de Libreview, código HTTP: ",
   "GraphFailed":" Sin gráfico de Libreview, código HTTP: ",
+  "GlucoDexFailed":" Sin datos de glucemia de Dexcom Share, código HTTP: ",
   "NoRecentGluco":"No hay glucemia reciente",
   "LinkUpIndefini":"Cuenta LibreLinkUp no definida",
   "ZoneLinkUp":"Zona del servidor LibreLinkUp",
@@ -95,6 +97,8 @@ inline const char *LangES = R"====(
   "PasseDexcom":"Contraseña Dexcom Share",
   "Username":"Nombre de usuario",
   "Region":"Región",
-  "DexcomIndefini":"Cuenta Dexcom no definida"
+  "DexcomIndefini":"Cuenta Dexcom no definida",
+  "FormatHeure":"Formato de hora",
+  "TensionAlimentation":" Voltaje de la fuente de alimentación"
 }
 )====";

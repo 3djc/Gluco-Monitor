@@ -2,16 +2,17 @@
 #include <Arduino.h>
 #include "Dexcom.h"
 #include "Libreview.h"
+#include "Langues/Langue.h"
 
 //============ Version et Build ==========
-const char* Version = PROG_VERSION;
-const char* BuildDate = BUILD_DATE;
+const char *Version = PROG_VERSION;
+const char *BuildDate = BUILD_DATE;
 
 //======= VARIABLES ========
 String ssid = "", password = "", hostname = "";
 String MyIP = "0.0.0.0";
 
-String  libreEmail = "";
+String libreEmail = "";
 String librePass = "";
 String libreZone = "";
 bool ServerConnu = false;
@@ -24,7 +25,7 @@ String dexcomRegion = "Non-US"; // Default to "Non-US" region
 // Sensor selection
 SensorType sensorType = SENSOR_LIBRE; // Default to FreeStyle Libre
 
-//Regions possibles pour LibreLinkUp
+// Regions possibles pour LibreLinkUp
 const char *regions[12] = {"General", "", "Europe", " Europe 2", "France", "Germany", "USA", "Canada", "Australia", "Japan ", "Asia Pacific", "UAE"};
 const char *regionsCode[12] = {"", "", "eu", "eu2", "fr", "de", "us", "ca", "au", "jp", "ap", "ae"};
 
@@ -35,49 +36,48 @@ unsigned long lastReceptionGlycMillis = 0;
 unsigned long lastGlycOkMillis = 0;
 long AgeGlycemie = 0;
 
-
 // Heure
 int8_t idxFuseau = 2; // Fuseau Horaire
-int8_t Jour;        //-1=inconnu,0=dimanche,1=lundi...
-bool HeureValide=false;
+int8_t Jour;          //-1=inconnu,0=dimanche,1=lundi...
+bool HeureValide = false;
 int16_t Int_Heure, Int_Minute;
 String DATE, HEURE, DateAMJ, Hmn;
 uint64_t T_On_seconde = 0;
 
-
-
+// Tension Batterie
+int16_t TensionAlimentation = 0;
 
 // Glycémie
-int16_t glucoseValues[MAX_POINTS]; // Tableau glycemie sur environ 24h
+int16_t glucoseValues[MAX_POINTS];      // Tableau glycemie sur environ 24h
 unsigned long glucoseHeure[MAX_POINTS]; // Heure glycemie sur environ  24h
-int16_t pointCountGly = 0; // Nombre de points de glycémie actuellement stockés
+int16_t pointCountGly = 0;              // Nombre de points de glycémie actuellement stockés
 String Glycemie = "";
-int16_t GlycemieVal=0;
-int8_t TrendArrow = 0; // 0=non défini, -1=Double flèche vers le bas, 1=Flèche vers le bas, 2=Flèche vers le bas à droite, 3=Flèche vers la droite, 4=Flèche vers le haut à droite, 5=Flèche vers le haut, 6=Double flèche vers le haut
-unsigned long lastGlyUnixTime = 0; // Heure de la dernière glycémie reçue en format Unix Time
-int16_t targetLow=70,targetHigh=180; //Seuils zone verte
+int16_t GlycemieVal = 0;
+int8_t TrendArrow = 0;                    // 0=non défini, -1=Double flèche vers le bas, 1=Flèche vers le bas, 2=Flèche vers le bas à droite, 3=Flèche vers la droite, 4=Flèche vers le haut à droite, 5=Flèche vers le haut, 6=Double flèche vers le haut
+unsigned long lastGlyUnixTime = 0;        // Heure de la dernière glycémie reçue en format Unix Time
+int16_t targetLow = 70, targetHigh = 180; // Seuils zone verte
 GlucoseUnit glucoseUnit = GLUCOSE_UNIT_MGDL;
 GlucoseColor glucoseColor = GLUCOSE_BLANC;
+TimeFormat timeFormat = TIME_FORMAT_24H;
 
-
-//Generaux
+// Generaux
 String ES = String((char)27); // ESC Separator
 String FS = String((char)28); // File Separator
 String GS = String((char)29); // Group Separator
 String RS = String((char)30); // Record Separator
 String US = String((char)31); // Unit Separator
 
-int16_t LuminositeNuit=255; //Maximum
+int16_t LuminositeNuit = 255; // Maximum
 
-bool SetupEnCours=true;
+bool SetupEnCours = true;
 
 //======= Page HTML Brute ============
-bool AutorisationPageBrute=false;
-unsigned long TimerAutorisationBruteMillis=0;
+bool AutorisationPageBrute = false;
+unsigned long TimerAutorisationBruteMillis = 0;
 
 // PSRAM
 EXT_RAM_BSS_ATTR char MessageEcran[8192];
-EXT_RAM_BSS_ATTR String LoginJSON = "", GraphJSON = "",ConnectionJSON = "";
+EXT_RAM_BSS_ATTR String LoginJSON = "", GraphJSON = "", ConnectionJSON = "";
 
 String formatGlucoseValue(int16_t mgdl)
 {
@@ -100,35 +100,56 @@ String getGlucoseUnitLabel()
 void clearData()
 {
     Serial.println("Clearing all data (glucose, Dexcom cache, LibreView cache)...");
-    
+
     // Clear glucose arrays
-    for (int i = 0; i < MAX_POINTS; i++) {
+    for (int i = 0; i < MAX_POINTS; i++)
+    {
         glucoseValues[i] = 0;
         glucoseHeure[i] = 0;
     }
-    
+
     // Reset glucose variables
     pointCountGly = 0;
     Glycemie = "";
     GlycemieVal = 0;
     TrendArrow = 0;
     lastGlyUnixTime = 0;
-    
+
     // Clear JSON data
     LoginJSON = "";
     GraphJSON = "";
     ConnectionJSON = "";
-    
+
     // Reset timers to force immediate data fetch
     lastDemandeGlycMillis = 0;
     lastReceptionGlycMillis = 0;
     lastGlycOkMillis = 0;
     AgeGlycemie = 0;
-    
+
     // Clear Dexcom cache
     clearDexcomCache();
-    
+
     // Clear LibreView cache
     clearLibreViewCache();
 }
-    
+
+void LectureVbatterie()
+{
+    int Vmax=0;
+    int Vmin=10000;
+    int V;
+    int EcartV=0;
+    for (int i=0; i<10; i++)
+    {
+        V = analogReadMilliVolts(5);            // Pont diviseur sur GPIO 5
+        if (V>Vmax) Vmax=V;
+        if (V<Vmin) Vmin=V;
+        delay(10);
+    }
+    TensionAlimentation = (Vmax+Vmin)/2;
+    EcartV = Vmax - Vmin;
+                // Pont diviseur sur GPIO 5
+    TensionAlimentation = int(float(TensionAlimentation) * 1.33f); // Diviseur de tension 100k/100k+33k
+    EcartV = int(float(EcartV) * 1.33f);
+    EcranPrintln(HEURE + T("TensionAlimentation") + " : " + String(TensionAlimentation) + " mv" + " (Ecart: " + String(EcartV) + " mv)");
+}

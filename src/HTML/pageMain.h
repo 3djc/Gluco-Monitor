@@ -140,9 +140,10 @@ const char *MainHtml = R"====(
     <div id="svgGraphe"></div>
 
     <div class="LeBas">
-    <div>Version : <span id="version"></span></div>
-    <div><a href="https://f1atb.fr">https://F1ATB.fr</a></div>
-  </div>
+        <div><span id="lTensionAlim" data-i18n="TensionAlimentation">-Tension Alimentation-</span> <span id="TensionAlimValue"></span></div>
+        <div>Version : <span id="version"></span></div>
+        <div><a href="https://f1atb.fr">https://F1ATB.fr</a></div>
+    </div>
 
 
 </body>

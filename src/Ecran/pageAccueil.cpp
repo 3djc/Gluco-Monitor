@@ -24,9 +24,10 @@ void AccueiLoop()
     int16_t R0 = EcranH / 3.5;
     int16_t R1 = EcranH / 2 - 20;
     int16_t Teta0 = -180;
+    int16_t Yh = EcranH / 9;
     uint16_t Couleurs[] = {RGB565_BLUE, RGB565_GREEN, RGB565_ORANGE, RGB565_RED};
     uint16_t CouleursFond[] = {C_bleuFonce, C_vertFonce, C_orangeFonce, C_rougeFonce};
-    int16_t glucoseInfoColor =  RGB565_WHITE;
+    int16_t glucoseInfoColor = RGB565_WHITE;
     int seuilCoul[] = {0, 70, 180, 300, 400};
     seuilCoul[1] = targetLow;
     seuilCoul[2] = targetHigh;
@@ -39,10 +40,33 @@ void AccueiLoop()
     Trace_Gauge(CanvaAccueil);
 
     // HEURE
+    if (timeFormat == TIME_FORMAT_12H)
+    {
+        CanvaAccueil->setFont(u8g2_font_fub30_tf);
+        Yh -= 4;
+    }
+    else
+    {
+        CanvaAccueil->setFont(u8g2_font_fub35_tf);
+    }
 
-    CanvaAccueil->setFont(u8g2_font_fub35_tf);
     if (HeureValide)
-        PrintDroite(CanvaAccueil, Hmn, -1, EcranH / 9, 1);
+        PrintDroite(CanvaAccueil, Hmn, -1, Yh, 1);
+
+    // Charge Batterie
+    if (TensionAlimentation < 3180)
+    { // On affiche si batterie branchée
+        uint16_t batteryColor = RGB565_GREEN;
+        if (TensionAlimentation < 2950)
+            batteryColor = RGB565_ORANGE;
+        if (TensionAlimentation < 2800)
+            batteryColor = RGB565_RED;
+
+        CanvaAccueil->fillRect(0, 0, 20, 7, batteryColor);
+        CanvaAccueil->writeFastHLine(0, 3, 24, batteryColor);
+        CanvaAccueil->writeFastHLine(0, 4, 24, batteryColor);
+    }
+
     // Affiche Glycemie
     if (Glycemie == "")
     {
@@ -61,7 +85,8 @@ void AccueiLoop()
     else
     {
         bool tooOld = AgeGlycemie / 60 > 20;
-        if (glucoseColor == GLUCOSE_COULEUR){ //Prefere valeur glycémie en couleur
+        if (glucoseColor == GLUCOSE_COULEUR)
+        { // Prefere valeur glycémie en couleur
             for (int c = 0; c < 4; c++)
             {
                 if (GlycemieVal > seuilCoul[c])
@@ -69,9 +94,9 @@ void AccueiLoop()
             }
             glucoseInfoColor = Couleurs[idxCoul];
         }
-       
-        glucoseInfoColor = tooOld ? RGB565(50, 50, 50) : glucoseInfoColor; //On force en gris au dela de 20mn
-        
+
+        glucoseInfoColor = tooOld ? RGB565(50, 50, 50) : glucoseInfoColor; // On force en gris au dela de 20mn
+
         if (tooOld)
         {
             CanvaAccueil->setFont(u8g2_font_helvB18_tf);
@@ -88,7 +113,7 @@ void AccueiLoop()
             CanvaAccueil->setTextColor(RGB565_RED);
             PrintCentre(CanvaAccueil, text, W2, EcranH / 9, 1);
         }
-        
+
         CanvaAccueil->setTextColor(glucoseInfoColor);
         CanvaAccueil->setFont(u8g2_font_inb63_mn);
         PrintCentre(CanvaAccueil, formatGlucoseValue(GlycemieVal), W2, C + 25, 1);
@@ -107,7 +132,7 @@ void AccueiLoop()
 
         // Flèche tendance
         int16_t X0 = EcranW / 6;
-        int16_t Y0 = EcranH / 6;
+        int16_t Y0 = EcranH / 6 + 5;
         int16_t x0, y0, x1, y1, x2, y2, x3, y3, x4, y4;
         int16_t offset = 40;
         switch (TrendArrow)
@@ -299,6 +324,17 @@ void AccueiLoop()
             CanvaAccueil->fillRect(last_x, EcranH10 - y, x - last_x, y, Couleurs[idxCoul]);
             last_x = x;
             int heure = unixToHeure(glucoseHeure[i]);
+            if (timeFormat == TIME_FORMAT_12H)
+            {
+                if (heure > 12)
+                {
+                    heure -= 12;
+                }
+                else if (heure == 0)
+                {
+                    heure = 12; // Midnight case
+                }
+            }
             if (heure != lastHeure)
             {
                 if (heure >= 0 && lastHeure >= 0)

@@ -113,12 +113,13 @@ void Init_Server()
                 doc["targetLow"] = targetLow;
                 doc["targetHigh"] = targetHigh;
                 doc["sensorType"] = (int)sensorType;
+                doc["TensionAlimentation"] = TensionAlimentation;
                 String Json;
                 serializeJson(doc, Json);
                 request->send(200, "application/json", Json); });
   server.on("/dataGly", HTTP_GET, [](AsyncWebServerRequest *request)
             {
-                int16_t tailles[2]; //Pour Javascript derrier, il faut un multiple de 4 octets
+                int16_t tailles[2]; //Pour Javascript derriere, il faut un multiple de 4 octets
                 tailles[0]=pointCountGly;
                 memcpy(&MonBuffer[0], tailles,  2*sizeof(int16_t)); //En premier la taille des tableaux
                 memcpy(&MonBuffer[4], glucoseHeure, pointCountGly * sizeof(uint32_t));

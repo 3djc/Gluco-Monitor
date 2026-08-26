@@ -18,6 +18,11 @@ enum GlucoseColor {
     GLUCOSE_BLANC = 0,
     GLUCOSE_COULEUR = 1
 };
+//Format Horaire
+enum TimeFormat {
+    TIME_FORMAT_24H = 0,
+    TIME_FORMAT_12H = 1
+};
 
 #define RecurrenceGlycemie 120000 // 2 minutes
 
@@ -68,12 +73,16 @@ extern unsigned long lastGlyUnixTime;
 extern int16_t GlycemieVal, targetLow,targetHigh;
 extern GlucoseUnit glucoseUnit;
 extern GlucoseColor glucoseColor;
+extern TimeFormat timeFormat;
 
 extern String ES, FS, GS, RS, US;
 
 extern int16_t LuminositeNuit;
 
 extern bool SetupEnCours;
+
+//Tension Batterie
+extern int16_t TensionAlimentation;
 
 //======= Page HTML Brute ============
 extern bool AutorisationPageBrute;
@@ -88,3 +97,4 @@ void clearData();
 
 String formatGlucoseValue(int16_t mgdl);
 String getGlucoseUnitLabel();
+void LectureVbatterie();

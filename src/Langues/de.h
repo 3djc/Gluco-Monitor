@@ -26,9 +26,11 @@ inline const char *LangDE = R"====(
   "WaitGluco":"Warten auf Glukosewert",
   "ConfNul":"Unvollständige Konfiguration",
   "LoginFailed":" Keine Verbindung zu Libreview, HTTP-Code: ",
+  "LoginDexFailed":" Keine Verbindung zu Dexcom Share, HTTP-Code: ",
   "LastGlyco":" Letzter bekannter Glukosewert: ",
   "le":" am ",
   "GlucoFailed":" Keine Glukosedaten von Libreview, HTTP-Code: ",
+  "GlucoDexFailed":" Keine Glukosedaten von Dexcom Share, HTTP-Code: ",
   "GraphFailed":" Kein Diagramm von Libreview, HTTP-Code: ",
   "NoRecentGluco":"Keine aktuellen Glukosewerte",
   "LinkUpIndefini":"LibreLinkUp-Konto nicht definiert",
@@ -95,7 +97,9 @@ inline const char *LangDE = R"====(
   "PasseDexcom":"Dexcom Share Passwort",
   "Username":"Benutzername",
   "Region":"Region",
-  "DexcomIndefini":"Dexcom-Konto nicht definiert"
+  "DexcomIndefini":"Dexcom-Konto nicht definiert",
+  "FormatHeure":"Zeitformat",
+  "TensionAlimentation":" Versorgungsspannung"
 }
 )====";
 

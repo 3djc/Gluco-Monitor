@@ -112,17 +112,26 @@ void FormatteHeureDate()
   DATE = String(buffer);
   strftime(buffer, sizeof(buffer), "%Y%m%d", &timeinfo);
   DateAMJ = String(buffer);
-  strftime(buffer, sizeof(buffer), "%H:%M:%S", &timeinfo);
+  if (timeFormat == TIME_FORMAT_12H) {
+    strftime(buffer, sizeof(buffer), "%l:%M:%S %p", &timeinfo);
+  } else {
+    strftime(buffer, sizeof(buffer), "%H:%M:%S", &timeinfo);
+  }
   HEURE = String(buffer);
-  strftime(buffer, sizeof(buffer), "%H:%M", &timeinfo);
+  if (timeFormat == TIME_FORMAT_12H) {
+    strftime(buffer, sizeof(buffer), "%l:%M %p", &timeinfo);
+  } else {
+    strftime(buffer, sizeof(buffer), "%H:%M", &timeinfo);
+  }
   Hmn = String(buffer);
+  
   Int_Heure = timeinfo.tm_hour;
   Int_Minute = timeinfo.tm_min;
   Jour = timeinfo.tm_wday; //-1=inconnu,0=dimanche,1=lundi...
   T_On_seconde = esp_timer_get_time() / 1000000; //Timer en microseconde sur 64 bits
   if (Int_Heure < 7 || Int_Heure >= 21)
   {
-    ledcWrite(GFX_BL, LuminositeNuit); // Baisser la luminosité la nuit ?????????????????????????????
+    ledcWrite(GFX_BL, LuminositeNuit); // Baisser la luminosité la nuit 
   }
   else
   {

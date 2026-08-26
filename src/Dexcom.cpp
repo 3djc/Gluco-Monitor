@@ -70,7 +70,7 @@ bool loginDexcomShare()
         
         if (httpCode != HTTP_CODE_OK) {
             Serial.println("Authentification échouée: " + String(httpCode));
-            EcranPrintln(HEURE + T("LoginFailed") + String(httpCode), RGB565_ORANGE);
+            EcranPrintln(HEURE + T("LoginDexFailed") + String(httpCode), RGB565_ORANGE);
             return false;
         }
         
@@ -119,7 +119,7 @@ bool loginDexcomShare()
     
     if (httpCode != HTTP_CODE_OK) {
         Serial.println("Login échoué: " + String(httpCode));
-        EcranPrintln(HEURE + T("LoginFailed") + String(httpCode), RGB565_ORANGE);
+        EcranPrintln(HEURE + T("LoginDexFailed") + String(httpCode), RGB565_ORANGE);
         return false;
     }
     
@@ -165,7 +165,7 @@ void getDexcomReadings()
 
         if (response.length() == 0) {
             Serial.println("Réponse vide - aucune donnée disponible");
-            EcranPrintln(HEURE + T("GlucoFailed") + " (empty response)", RGB565_ORANGE);
+            EcranPrintln(HEURE + T("GlucoDexFailed") + " (empty response)", RGB565_ORANGE);
             https.end();
             return;
         }
@@ -247,10 +247,10 @@ void getDexcomReadings()
             Serial.println("Nombre de points Dexcom: " + String(pointCountGly));
             lastGlycOkMillis = millis();
         } else {
-            EcranPrintln(HEURE + T("GlucoFailed") + " (no data)", RGB565_ORANGE);
+            EcranPrintln(HEURE + T("GlucoDexFailed") + " (no data)", RGB565_ORANGE);
         }
     } else {
-        EcranPrintln(HEURE + T("GlucoFailed") + String(httpCode), RGB565_ORANGE);
+        EcranPrintln(HEURE + T("GlucoDexFailed") + String(httpCode), RGB565_ORANGE);
         Serial.println("Erreur lecture Dexcom: " + response);
     }
 
