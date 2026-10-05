@@ -151,7 +151,16 @@ static void present()
 // Input: mouse -> touch point, keyboard shortcuts, optional script
 // ---------------------------------------------------------------------------------------
 static bool g_touchDown = false;
+static uint32_t g_releaseAt = 0; // a tap is held for a minimum time: the firmware only polls touch every 20 ms
 static int g_touchX = 0, g_touchY = 0; // in the logical (rotated) screen coordinates
+static bool g_debugInput = false;
+
+static void touchRelease()
+{
+    g_touchDown = false;
+    g_releaseAt = SDL_GetTicks() + 80;
+}
+static bool touchActive() { return g_touchDown || SDL_GetTicks() < g_releaseAt; }
 
 struct ScriptEvent
 {
@@ -229,7 +238,7 @@ static void runScript()
             g_touchDown = true;
         }
         else if (ev.action == "up")
-            g_touchDown = false;
+            touchRelease();
         else if (ev.action == "shot")
         {
             if (g_dirty)
@@ -249,11 +258,17 @@ static void runScript()
 
 static void toLogical(int wx, int wy, int &lx, int &ly)
 {
-    float fx = wx, fy = wy;
-    if (g_renderer)
-        SDL_RenderWindowToLogical(g_renderer, wx, wy, &fx, &fy);
-    lx = (int)fx;
-    ly = (int)fy;
+    int vw, vh, ww = 0, wh = 0;
+    viewSize(vw, vh);
+    if (g_window)
+        SDL_GetWindowSize(g_window, &ww, &wh);
+    if (ww <= 0 || wh <= 0)
+    {
+        ww = vw;
+        wh = vh;
+    }
+    lx = constrain(wx * vw / ww, 0, vw - 1);
+    ly = constrain(wy * vh / wh, 0, vh - 1);
 }
 
 static void pump()
@@ -272,11 +287,17 @@ static void pump()
                 {
                     toLogical(e.button.x, e.button.y, g_touchX, g_touchY);
                     g_touchDown = true;
+                    if (g_debugInput)
+                        fprintf(stderr, "[sim] mouse down window=(%d,%d) screen=(%d,%d)\n", e.button.x, e.button.y, g_touchX, g_touchY);
                 }
                 break;
             case SDL_MOUSEBUTTONUP:
                 if (e.button.button == SDL_BUTTON_LEFT)
-                    g_touchDown = false;
+                {
+                    touchRelease();
+                    if (g_debugInput)
+                        fprintf(stderr, "[sim] mouse up\n");
+                }
                 break;
             case SDL_MOUSEMOTION:
                 if (g_touchDown)
@@ -300,7 +321,7 @@ size_t TwoWire::requestFrom(uint8_t, size_t len)
 {
     pump();
     memset(buf, 0, sizeof(buf));
-    if (g_touchDown)
+    if (touchActive())
     {
         int rawX = 0, rawY = 0;
         switch (rotation)
@@ -547,6 +568,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc)
             g_scale = atoi(argv[++i]);
     }
+    g_debugInput = getenv("SIM_DEBUG") != nullptr;
     if (getenv("SIM_SCRIPT"))
         script = getenv("SIM_SCRIPT");
     parseScript(script);
@@ -558,12 +580,14 @@ int main(int argc, char **argv)
             fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
             return 1;
         }
+        SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1"); // don't swallow the click that focuses the window
         g_window = SDL_CreateWindow("Gluco-Monitor simulator", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                     PANEL_H * g_scale, PANEL_W * g_scale, SDL_WINDOW_RESIZABLE);
         g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
         if (!g_renderer)
             g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_SOFTWARE);
         SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
+        SDL_RaiseWindow(g_window);
         fprintf(stderr, "[sim] click/drag = touch/swipe | Up/Down = glucose +/-10 | Home = reset | S = screenshot | R = restart | Q = quit\n");
     }
 
