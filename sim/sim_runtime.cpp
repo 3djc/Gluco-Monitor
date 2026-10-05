@@ -41,6 +41,8 @@ static SDL_Window *g_window = nullptr;
 static SDL_Renderer *g_renderer = nullptr;
 static SDL_Texture *g_texture = nullptr;
 static int g_view_w = 0, g_view_h = 0;
+static SDL_Rect g_dst = {0, 0, 0, 0}; // where the screen is drawn inside the window (renderer pixels)
+static float g_dstScale = 1.0f;
 static uint32_t g_lastPresent = 0;
 static int g_shots = 0;
 
@@ -135,7 +137,6 @@ static void present()
         if (g_texture)
             SDL_DestroyTexture(g_texture);
         g_texture = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
-        SDL_RenderSetLogicalSize(g_renderer, w, h);
         SDL_SetWindowSize(g_window, w * g_scale, h * g_scale);
         g_view_w = w;
         g_view_h = h;
@@ -143,8 +144,19 @@ static void present()
     std::vector<uint32_t> px;
     renderView(px, w, h, true);
     SDL_UpdateTexture(g_texture, nullptr, px.data(), w * 4);
+    // Fit the screen into the window keeping the aspect ratio. This is done by hand (not with
+    // SDL_RenderSetLogicalSize) because SDL silently rescales mouse events when a logical size is
+    // set, which would make the window->screen mapping below apply twice.
+    int ow, oh;
+    SDL_GetRendererOutputSize(g_renderer, &ow, &oh);
+    float sc = std::min((float)ow / w, (float)oh / h);
+    g_dst.w = (int)(w * sc);
+    g_dst.h = (int)(h * sc);
+    g_dst.x = (ow - g_dst.w) / 2;
+    g_dst.y = (oh - g_dst.h) / 2;
+    g_dstScale = sc;
     SDL_RenderClear(g_renderer);
-    SDL_RenderCopy(g_renderer, g_texture, nullptr, nullptr);
+    SDL_RenderCopy(g_renderer, g_texture, nullptr, &g_dst);
     SDL_RenderPresent(g_renderer);
 }
 
@@ -300,6 +312,7 @@ static void handleKey(SDL_Keycode k)
     }
 }
 
+static void screenToWindow(int x, int y, int &wx, int &wy);
 static void runScript()
 {
     uint32_t now = SDL_GetTicks();
@@ -320,16 +333,14 @@ static void runScript()
             // same path as a real mouse. Needs a window, e.g. SDL_VIDEODRIVER=dummy.
             int x = 0, y = 0;
             sscanf(ev.arg.c_str(), "%d,%d", &x, &y);
-            int vw, vh, ww = 0, wh = 0;
-            viewSize(vw, vh);
-            if (g_window)
-                SDL_GetWindowSize(g_window, &ww, &wh);
             SDL_Event se;
             memset(&se, 0, sizeof(se));
-            int wx = ww ? x * ww / vw : x, wy = wh ? y * wh / vh : y;
+            int wx, wy;
+            screenToWindow(x, y, wx, wy);
             if (ev.action == "mmove")
             {
                 se.type = SDL_MOUSEMOTION;
+                se.motion.windowID = SDL_GetWindowID(g_window); // like a real event: SDL's own event watchers see it
                 se.motion.state = SDL_BUTTON_LMASK;
                 se.motion.x = wx;
                 se.motion.y = wy;
@@ -337,6 +348,7 @@ static void runScript()
             else
             {
                 se.type = ev.action == "mdown" ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
+                se.button.windowID = SDL_GetWindowID(g_window);
                 se.button.button = SDL_BUTTON_LEFT;
                 se.button.x = wx;
                 se.button.y = wy;
@@ -364,31 +376,45 @@ static void runScript()
     }
 }
 
-static void toLogical(int wx, int wy, int &lx, int &ly)
+// Window coordinates (points, as in mouse events) <-> screen coordinates (480x320 for rotation 1).
+static void windowToScreen(int wx, int wy, int &lx, int &ly)
 {
-    int vw, vh;
+    int vw, vh, ww = 0, wh = 0, ow = 0, oh = 0;
     viewSize(vw, vh);
-    if (g_renderer && g_view_w == vw && g_view_h == vh)
+    if (g_window)
+        SDL_GetWindowSize(g_window, &ww, &wh);
+    if (g_renderer)
+        SDL_GetRendererOutputSize(g_renderer, &ow, &oh);
+    float px = wx, py = wy; // renderer pixels (differs from points on high-DPI displays)
+    if (ww > 0 && wh > 0 && ow > 0 && oh > 0)
     {
-        // SDL knows about letterboxing and high-DPI scaling.
-        float fx, fy;
-        SDL_RenderWindowToLogical(g_renderer, wx, wy, &fx, &fy);
-        lx = constrain((int)fx, 0, vw - 1);
-        ly = constrain((int)fy, 0, vh - 1);
+        px = wx * (float)ow / ww;
+        py = wy * (float)oh / wh;
+    }
+    if (g_dst.w > 0)
+    {
+        lx = (int)((px - g_dst.x) / g_dstScale);
+        ly = (int)((py - g_dst.y) / g_dstScale);
     }
     else
     {
-        int ww = 0, wh = 0;
-        if (g_window)
-            SDL_GetWindowSize(g_window, &ww, &wh);
-        if (ww <= 0 || wh <= 0)
-        {
-            ww = vw;
-            wh = vh;
-        }
-        lx = constrain(wx * vw / ww, 0, vw - 1);
-        ly = constrain(wy * vh / wh, 0, vh - 1);
+        lx = (int)px;
+        ly = (int)py;
     }
+    lx = constrain(lx, 0, vw - 1);
+    ly = constrain(ly, 0, vh - 1);
+}
+
+static void screenToWindow(int x, int y, int &wx, int &wy)
+{
+    int ww = 0, wh = 0, ow = 0, oh = 0;
+    if (g_window)
+        SDL_GetWindowSize(g_window, &ww, &wh);
+    if (g_renderer)
+        SDL_GetRendererOutputSize(g_renderer, &ow, &oh);
+    float px = g_dst.x + x * g_dstScale, py = g_dst.y + y * g_dstScale;
+    wx = (ow > 0 && ww > 0) ? (int)(px * ww / ow) : (int)px;
+    wy = (oh > 0 && wh > 0) ? (int)(py * wh / oh) : (int)py;
 }
 
 static void pump()
@@ -405,7 +431,7 @@ static void pump()
             case SDL_MOUSEBUTTONDOWN:
                 if (e.button.button == SDL_BUTTON_LEFT)
                 {
-                    toLogical(e.button.x, e.button.y, g_anchorX, g_anchorY);
+                    windowToScreen(e.button.x, e.button.y, g_anchorX, g_anchorY);
                     g_touchX = g_anchorX;
                     g_touchY = g_anchorY;
                     touchPress();
@@ -433,7 +459,7 @@ static void pump()
                 if (g_touchDown && !g_flickAt && (e.motion.state & SDL_BUTTON_LMASK))
                 {
                     int mx, my, vw, vh;
-                    toLogical(e.motion.x, e.motion.y, mx, my);
+                    windowToScreen(e.motion.x, e.motion.y, mx, my);
                     viewSize(vw, vh);
                     auto amplify = [](int anchor, int now)
                     {
