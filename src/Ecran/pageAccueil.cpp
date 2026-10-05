@@ -10,6 +10,50 @@ static float dtReponse = 0.0;
 
 void Trace_Gauge(Arduino_Canvas *canva);
 
+// Variation de glycémie (mg/dL) entre la mesure actuelle et une mesure antérieure.
+// dureeSec = 0 : la mesure précédente ; sinon la mesure la plus proche de "maintenant - dureeSec" (à 7,5 min près).
+static bool variationGlycemie(long dureeSec, int &delta)
+{
+    if (pointCountGly < 2 || lastGlyUnixTime == 0)
+        return false;
+    long tActuel = (long)lastGlyUnixTime;
+    int meilleur = -1;
+    long ecartMin = 1000000L;
+    for (int i = pointCountGly - 1; i >= 0; i--)
+    {
+        long t = (long)glucoseHeure[i];
+        if (t >= tActuel)
+            continue; // La mesure actuelle (parfois enregistrée plusieurs fois)
+        if (dureeSec == 0)
+        {
+            meilleur = i; // La plus récente des mesures antérieures
+            break;
+        }
+        long ecart = labs(t - (tActuel - dureeSec));
+        if (ecart < ecartMin)
+        {
+            ecartMin = ecart;
+            meilleur = i;
+        }
+    }
+    if (meilleur < 0 || (dureeSec > 0 && ecartMin > 450))
+        return false;
+    delta = GlycemieVal - glucoseValues[meilleur];
+    return true;
+}
+
+static String formatVariation(bool valide, int deltaMgdl)
+{
+    if (!valide)
+        return "--";
+    String S = deltaMgdl > 0 ? "+" : "";
+    if (glucoseUnit == GLUCOSE_UNIT_MMOLL)
+        S += String(float(deltaMgdl) / 18.0f, 1);
+    else
+        S += String(deltaMgdl);
+    return S;
+}
+
 void AccueilInit()
 {
 }
@@ -22,8 +66,6 @@ void AccueiLoop()
     int16_t W2 = EcranW / 2;
     int16_t C = EcranH / 2;
     int16_t R0 = EcranH / 3.5;
-    int16_t R1 = EcranH / 2 - 20;
-    int16_t Teta0 = -180;
     int16_t Yh = EcranH / 9;
     uint16_t Couleurs[] = {RGB565_BLUE, RGB565_GREEN, RGB565_ORANGE, RGB565_RED};
     uint16_t CouleursFond[] = {C_bleuFonce, C_vertFonce, C_orangeFonce, C_rougeFonce};
@@ -37,8 +79,6 @@ void AccueiLoop()
         seuilCoul[4] = 22 * 18;
     }
     int idxCoul = 0;
-    Trace_Gauge(CanvaAccueil);
-
     // HEURE
     if (timeFormat == TIME_FORMAT_12H)
     {
@@ -120,24 +160,50 @@ void AccueiLoop()
 
         CanvaAccueil->setFont(u8g2_font_10x20_tf);
         PrintGauche(CanvaAccueil, getGlucoseUnitLabel(), W2 + R0, C + 20, 1);
-        glucoseInfoColor = tooOld ? RGB565(50, 50, 50) : RGB565_WHITE;
-        Teta0 = -180 + 18 * GlycemieVal / 40;
-        if (Teta0 > 0)
-            Teta0 = 0;
-        if (Teta0 < -180)
-            Teta0 = -180;
-        float T = float(Teta0) * 3.14 / 180.0; // Conversion en radians
-        R0 = 0.8 * R0;
-        CanvaAccueil->fillTriangle(W2 + R1 * cos(T), C + R1 * sin(T), W2 + R0 * cos(T - 0.2), C + R0 * sin(T - 0.2), W2 + R0 * cos(T + 0.2), C + R0 * sin(T + 0.2), glucoseInfoColor); // Aiguille
+        glucoseInfoColor = tooOld ? RGB565(50, 50, 50) : RGB565_WHITE; // Couleur de la flèche de tendance
 
-        // Flèche tendance
-        int16_t X0 = EcranW / 6;
-        int16_t Y0 = EcranH / 6 + 5;
-        int16_t x0, y0, x1, y1, x2, y2, x3, y3, x4, y4;
-        int16_t offset = 40;
+        // Bandeau horizontal : flèche de tendance, variation depuis la dernière mesure, variation sur 15 minutes
+        const int16_t BandeY = 44, BandeH = 74;
+        CanvaAccueil->fillRoundRect(6, BandeY, EcranW - 12, BandeH, 10, RGB565(24, 24, 24));
+
+        static String legendeDerniere, legende15;
+        static int8_t langueLegendes = -100; // T() est coûteux : on ne retraduit que si la langue change
+        if (langueLegendes != LaLangue)
+        {
+            legendeDerniere = T("DeltaLast");
+            legende15 = T("Delta15");
+            langueLegendes = LaLangue;
+        }
+        int deltaDerniere = 0, delta15 = 0;
+        String sDerniere = formatVariation(variationGlycemie(0, deltaDerniere), deltaDerniere);
+        String s15 = formatVariation(variationGlycemie(15 * 60, delta15), delta15);
+        uint16_t couleurDelta = tooOld ? RGB565(50, 50, 50) : RGB565_WHITE;
+        int16_t XA = 112 + (EcranW - 6 - 112) / 4;     // Centre colonne "dernière mesure"
+        int16_t XB = 112 + 3 * (EcranW - 6 - 112) / 4; // Centre colonne "15 minutes"
+        CanvaAccueil->drawFastVLine(112, BandeY + 10, BandeH - 20, C_grisMoyen);
+        CanvaAccueil->drawFastVLine((XA + XB) / 2, BandeY + 10, BandeH - 20, C_grisMoyen);
+        CanvaAccueil->setFont(u8g2_font_helvB14_tf);
+        CanvaAccueil->setTextColor(RGB565_GREY);
+        PrintCentre(CanvaAccueil, legendeDerniere, XA, BandeY + 22, 1);
+        PrintCentre(CanvaAccueil, legende15, XB, BandeY + 22, 1);
+        CanvaAccueil->setFont(u8g2_font_fub30_tf);
+        CanvaAccueil->setTextColor(couleurDelta);
+        PrintCentre(CanvaAccueil, sDerniere, XA, BandeY + 64, 1);
+        PrintCentre(CanvaAccueil, s15, XB, BandeY + 64, 1);
+
+        // Flèche tendance, dessinée aux 3/4 de sa taille pour tenir dans le bandeau
+        int16_t X0 = 62;
+        int16_t Y0 = BandeY + BandeH / 2;
+        int16_t x0 = 0, y0 = 0, x1 = 0, y1 = 0, x2 = 0, y2 = 0, x3 = 0, y3 = 0, x4 = 0, y4 = 0;
+        int16_t offset = 30;
+        bool doubleFleche = false;
+        bool flecheDefinie = true;
         switch (TrendArrow)
         {
         case -1: // DoubleDown
+            doubleFleche = true;
+            // fall through
+        case 1: // Flèche vers le bas fort
             x0 = -20;
             y0 = 0;
             x1 = 0;
@@ -147,24 +213,9 @@ void AccueiLoop()
             x3 = -10;
             y3 = -50;
             x4 = +10;
-            y4 = -50; // Double flèche vers le bas fort
-            // Draw second arrow for double down
-            CanvaAccueil->fillTriangle(X0 + x0 - offset, Y0 + y0, X0 + x1 - offset, Y0 + y1, X0 + x2 - offset, Y0 + y2, glucoseInfoColor); // Aiguille
-            CanvaAccueil->fillTriangle(X0 + x3 - offset, Y0 + y3, X0 + x1 - offset, Y0 + y1, X0 + x4 - offset, Y0 + y4, glucoseInfoColor);
+            y4 = -50;
             break;
-        case 1:
-            x0 = -20;
-            y0 = 0;
-            x1 = 0;
-            y1 = 20;
-            x2 = 20;
-            y2 = 0;
-            x3 = -10;
-            y3 = -50;
-            x4 = +10;
-            y4 = -50; // Flèche vers le bas fort
-            break;
-        case 2:
+        case 2: // Flèche vers le bas
             x0 = 0;
             y0 = 20;
             x1 = 20;
@@ -174,9 +225,9 @@ void AccueiLoop()
             x3 = -30;
             y3 = -40;
             x4 = -40;
-            y4 = -30; // Flèche vers le bas
+            y4 = -30;
             break;
-        case 3:
+        case 3: // Flèche horizontale
             x0 = 0;
             y0 = 20;
             x1 = 20;
@@ -186,9 +237,9 @@ void AccueiLoop()
             x3 = -50;
             y3 = -10;
             x4 = -50;
-            y4 = +10; // Flèche horizontale
+            y4 = +10;
             break;
-        case 4:
+        case 4: // Flèche vers le haut
             x0 = 20;
             y0 = 0;
             x1 = 20;
@@ -198,21 +249,12 @@ void AccueiLoop()
             x3 = -30;
             y3 = +40;
             x4 = -40;
-            y4 = +30; // Flèche vers le haut
-            break;
-        case 5:
-            x0 = 20;
-            y0 = 0;
-            x1 = 0;
-            y1 = -20;
-            x2 = -20;
-            y2 = 0;
-            x3 = -10;
-            y3 = 50;
-            x4 = +10;
-            y4 = 50; // Flèche vers le haut fort
+            y4 = +30;
             break;
         case 6: // DoubleUp
+            doubleFleche = true;
+            // fall through
+        case 5: // Flèche vers le haut fort
             x0 = 20;
             y0 = 0;
             x1 = 0;
@@ -222,39 +264,54 @@ void AccueiLoop()
             x3 = -10;
             y3 = 50;
             x4 = +10;
-            y4 = 50; // Double flèche vers le haut fort
-            // Draw second arrow for double up
-            CanvaAccueil->fillTriangle(X0 + x0 - offset, Y0 + y0, X0 + x1 - offset, Y0 + y1, X0 + x2 - offset, Y0 + y2, glucoseInfoColor); // Aiguille
-            CanvaAccueil->fillTriangle(X0 + x3 - offset, Y0 + y3, X0 + x1 - offset, Y0 + y1, X0 + x4 - offset, Y0 + y4, glucoseInfoColor);
+            y4 = 50;
             break;
+        default:
+            flecheDefinie = false; // 0 = tendance inconnue
         }
-        CanvaAccueil->fillTriangle(X0 + x0, Y0 + y0, X0 + x1, Y0 + y1, X0 + x2, Y0 + y2, glucoseInfoColor); // Aiguille
-        CanvaAccueil->fillTriangle(X0 + x3, Y0 + y3, X0 + x1, Y0 + y1, X0 + x4, Y0 + y4, glucoseInfoColor);
+        if (flecheDefinie)
+        {
+            x0 = x0 * 3 / 4, y0 = y0 * 3 / 4, x1 = x1 * 3 / 4, y1 = y1 * 3 / 4, x2 = x2 * 3 / 4;
+            y2 = y2 * 3 / 4, x3 = x3 * 3 / 4, y3 = y3 * 3 / 4, x4 = x4 * 3 / 4, y4 = y4 * 3 / 4;
+            if (doubleFleche)
+            {
+                CanvaAccueil->fillTriangle(X0 + x0 - offset, Y0 + y0, X0 + x1 - offset, Y0 + y1, X0 + x2 - offset, Y0 + y2, glucoseInfoColor);
+                CanvaAccueil->fillTriangle(X0 + x3 - offset, Y0 + y3, X0 + x1 - offset, Y0 + y1, X0 + x4 - offset, Y0 + y4, glucoseInfoColor);
+            }
+            CanvaAccueil->fillTriangle(X0 + x0, Y0 + y0, X0 + x1, Y0 + y1, X0 + x2, Y0 + y2, glucoseInfoColor);
+            CanvaAccueil->fillTriangle(X0 + x3, Y0 + y3, X0 + x1, Y0 + y1, X0 + x4, Y0 + y4, glucoseInfoColor);
+        }
     }
-    // Ecrit durée depuis la dernière glycémie
-    CanvaAccueil->setFont(u8g2_font_helvB18_tf);
-    CanvaAccueil->setTextColor(RGB565_WHITE);
-    if (HeureValide && lastGlyUnixTime > 0)
+    // Age de la dernière glycémie : disque qui se remplit en 5 minutes (sens horaire depuis midi)
     {
-
-        time_t now;
-        time(&now);
-        AgeGlycemie = (long)now - lastGlyUnixTime;
-        int minutes = AgeGlycemie / 60;
-        int secondes = AgeGlycemie % 60;
-        char buffer[10];
-        sprintf(buffer, "%d:%02d", minutes, secondes);
-
-        if (minutes >= 10)
-            CanvaAccueil->setTextColor(RGB565_ORANGE);
-        if (minutes >= 15)
-            CanvaAccueil->setTextColor(RGB565_RED);
-        PrintDroite(CanvaAccueil, String(buffer), EcranW, EcranH / 3, 1);
-    }
-    else
-    {
-        CanvaAccueil->setTextColor(RGB565_GREY);
-        PrintDroite(CanvaAccueil, T("Age"), EcranW, EcranH / 3, 1);
+        const int16_t Rc = 24;
+        const int16_t Xc = EcranW - Rc - 10;
+        const int16_t Yc = EcranH / 2 - 6; // à droite de la valeur, sous le bandeau
+        uint16_t couleurAge = RGB565_WHITE;
+        float fraction = 0.0;
+        if (HeureValide && lastGlyUnixTime > 0)
+        {
+            time_t now;
+            time(&now);
+            AgeGlycemie = (long)now - lastGlyUnixTime;
+            int minutes = AgeGlycemie / 60;
+            if (minutes >= 10)
+                couleurAge = RGB565_ORANGE;
+            if (minutes >= 15)
+                couleurAge = RGB565_RED;
+            fraction = float(AgeGlycemie) / 300.0; // 5 minutes = disque plein
+            if (fraction < 0.0)
+                fraction = 0.0;
+            if (fraction > 1.0)
+                fraction = 1.0;
+        }
+        else
+        {
+            couleurAge = RGB565_GREY; // Pas encore de mesure
+        }
+        CanvaAccueil->drawCircle(Xc, Yc, Rc, couleurAge);
+        if (fraction > 0.005)
+            CanvaAccueil->fillArc(Xc, Yc, Rc - 3, 1, -90, -90 + 360.0 * fraction, couleurAge);
     }
     CanvaAccueil->setTextColor(RGB565_WHITE);
     // Trace Avancement demande glycémie

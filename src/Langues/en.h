@@ -3,6 +3,8 @@ inline const char *LangEN = R"====(
 {
   "Age":"Age",
   "AgeGlyc":"Glucose Age",
+  "DeltaLast":"Last",
+  "Delta15":"15 min",
   "Compte":"Account",
   "Display":"Display",
   "Infos":"Information",
