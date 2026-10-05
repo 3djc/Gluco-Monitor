@@ -70,11 +70,15 @@ static void newReading(int stepMin, int spanHours)
     v = constrain(v, 40, 400);
     double slope = (v - (curve(now - 900) + sim_glucose_offset)) / 15.0;
 
+    // SIM_AGE=<seconds> backdates readings, to preview "old data" states of the home screen.
+    const char *age = getenv("SIM_AGE");
+    time_t stamp = now - (age ? atol(age) : 0);
+
     GlycemieVal = v;
     Glycemie = String(v);
-    TrendArrow = arrowFromSlope(slope);
-    lastGlyUnixTime = (unsigned long)now;
-    pushPoint(v, now);
+    TrendArrow = getenv("SIM_TREND") ? (int8_t)atoi(getenv("SIM_TREND")) : arrowFromSlope(slope); // SIM_TREND=-1..6 previews an arrow
+    lastGlyUnixTime = (unsigned long)stamp;
+    pushPoint(v, stamp);
     lastReceptionGlycMillis = millis();
     lastGlycOkMillis = millis();
     EcranPrintln(HEURE + T("LastGlyco") + formatGlucoseValue(GlycemieVal) + " " + getGlucoseUnitLabel() + " " + T("le") + unixToTimestamp(now));
@@ -98,8 +102,14 @@ static void simSensor(bool haveAccount, int stepMin, int spanHours, unsigned lon
     }
 }
 
-void LectureGlycemie() { simSensor(libreEmail != "" && librePass != "", 15, 12, 60000); }
-void LectureDexcom() { simSensor(dexcomUsername != "" && dexcomPassword != "", 5, 24, 60000); }
+// SIM_PERIOD=<seconds> changes how often a new reading arrives (default 60), to preview deltas quickly.
+static unsigned long periodMs()
+{
+    const char *p = getenv("SIM_PERIOD");
+    return p ? (unsigned long)atol(p) * 1000UL : 60000UL;
+}
+void LectureGlycemie() { simSensor(libreEmail != "" && librePass != "", 15, 12, periodMs()); }
+void LectureDexcom() { simSensor(dexcomUsername != "" && dexcomPassword != "", 5, 24, periodMs()); }
 bool loginLibreLinkUp() { return true; }
 bool loginDexcomShare() { return true; }
 void getDexcomReadings() {}

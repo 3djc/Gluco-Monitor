@@ -36,10 +36,12 @@ SDL_LIBS   := $(shell sdl2-config --libs)
 
 INCS := -Ishim -I$(SRC) -I$(GFX) -I$(U8G) -I$(LIBDEPS)/ArduinoJson/src -I$(CORE)
 DEFS := -DARDUINOJSON_ENABLE_ARDUINO_STRING=1 -DPROG_VERSION=\"sim\" -DBUILD_DATE=\"sim\" -DVERSION=sim
-CXXFLAGS := -std=gnu++17 -O1 -g -w $(DEFS) $(INCS) $(SDL_CFLAGS)
-CFLAGS   := -O1 -g -w $(INCS)
+CXXFLAGS := -MMD -MP -std=gnu++17 -O1 -g -w $(DEFS) $(INCS) $(SDL_CFLAGS)
+CFLAGS   := -MMD -MP -O1 -g -w $(INCS)
 
 all: $(BUILD)/gluco-sim
+
+-include $(OBJS:.o=.d)   # rebuild when a header (e.g. a language file) changes
 
 $(BUILD)/gluco-sim: $(OBJS)
 	$(CXX) -o $@ $^ $(SDL_LIBS)
