@@ -166,12 +166,22 @@ static int g_flickDx = 0, g_flickDy = 0;
 static uint32_t g_flickAt = 0;
 
 static int16_t g_releasePage = 0;
+static uint32_t g_pressAt = 0;
+static void touchPress()
+{
+    g_pressAt = SDL_GetTicks();
+    g_touchDown = true;
+}
 static void touchRelease()
 {
     g_touchDown = false;
     g_releasePage = PageActu;
-    // The settings menu (page 1) only reacts to a press held > 300 ms; elsewhere 80 ms is enough.
-    g_releaseAt = SDL_GetTicks() + (PageActu == 1 ? 340 : 80);
+    // Minimum press time, counted from the press: 50 ms so the firmware's 20 ms poll can't miss a
+    // quick tap; 340 ms on the settings menu (page 1), which only reacts to a press held > 300 ms.
+    // Kept short otherwise so a tap doesn't outlive the firmware's key-highlight delay and repeat.
+    uint32_t minHold = PageActu == 1 ? 340 : 50;
+    uint32_t now = SDL_GetTicks();
+    g_releaseAt = std::max(now, g_pressAt + minHold);
 }
 static bool touchActive()
 {
@@ -299,7 +309,8 @@ static void runScript()
         if (ev.action == "down" || ev.action == "move")
         {
             sscanf(ev.arg.c_str(), "%d,%d", &g_touchX, &g_touchY);
-            g_touchDown = true;
+            if (!g_touchDown)
+                touchPress();
         }
         else if (ev.action == "up")
             touchRelease();
@@ -319,6 +330,7 @@ static void runScript()
             if (ev.action == "mmove")
             {
                 se.type = SDL_MOUSEMOTION;
+                se.motion.state = SDL_BUTTON_LMASK;
                 se.motion.x = wx;
                 se.motion.y = wy;
             }
@@ -354,17 +366,29 @@ static void runScript()
 
 static void toLogical(int wx, int wy, int &lx, int &ly)
 {
-    int vw, vh, ww = 0, wh = 0;
+    int vw, vh;
     viewSize(vw, vh);
-    if (g_window)
-        SDL_GetWindowSize(g_window, &ww, &wh);
-    if (ww <= 0 || wh <= 0)
+    if (g_renderer && g_view_w == vw && g_view_h == vh)
     {
-        ww = vw;
-        wh = vh;
+        // SDL knows about letterboxing and high-DPI scaling.
+        float fx, fy;
+        SDL_RenderWindowToLogical(g_renderer, wx, wy, &fx, &fy);
+        lx = constrain((int)fx, 0, vw - 1);
+        ly = constrain((int)fy, 0, vh - 1);
     }
-    lx = constrain(wx * vw / ww, 0, vw - 1);
-    ly = constrain(wy * vh / wh, 0, vh - 1);
+    else
+    {
+        int ww = 0, wh = 0;
+        if (g_window)
+            SDL_GetWindowSize(g_window, &ww, &wh);
+        if (ww <= 0 || wh <= 0)
+        {
+            ww = vw;
+            wh = vh;
+        }
+        lx = constrain(wx * vw / ww, 0, vw - 1);
+        ly = constrain(wy * vh / wh, 0, vh - 1);
+    }
 }
 
 static void pump()
@@ -384,9 +408,15 @@ static void pump()
                     toLogical(e.button.x, e.button.y, g_anchorX, g_anchorY);
                     g_touchX = g_anchorX;
                     g_touchY = g_anchorY;
-                    g_touchDown = true;
+                    touchPress();
                     if (g_debugInput)
-                        fprintf(stderr, "[sim] mouse down window=(%d,%d) screen=(%d,%d)\n", e.button.x, e.button.y, g_touchX, g_touchY);
+                    {
+                        int ww, wh, ow, oh;
+                        SDL_GetWindowSize(g_window, &ww, &wh);
+                        SDL_GetRendererOutputSize(g_renderer, &ow, &oh);
+                        fprintf(stderr, "[sim] mouse down window=(%d,%d) -> screen=(%d,%d)  windowSize=%dx%d rendererOutput=%dx%d view=%dx%d\n",
+                                e.button.x, e.button.y, g_touchX, g_touchY, ww, wh, ow, oh, g_view_w, g_view_h);
+                    }
                 }
                 break;
             case SDL_MOUSEBUTTONUP:
@@ -398,7 +428,9 @@ static void pump()
                 }
                 break;
             case SDL_MOUSEMOTION:
-                if (g_touchDown && !g_flickAt)
+                if (g_touchDown && !g_flickAt && !(e.motion.state & SDL_BUTTON_LMASK))
+                    touchRelease(); // missed the button-up (e.g. released outside the window)
+                if (g_touchDown && !g_flickAt && (e.motion.state & SDL_BUTTON_LMASK))
                 {
                     int mx, my, vw, vh;
                     toLogical(e.motion.x, e.motion.y, mx, my);
