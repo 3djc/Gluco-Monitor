@@ -3,6 +3,8 @@ inline const char *LangDE = R"====(
 {
   "Age":"Alter",
   "AgeGlyc":"Alter der Glukose",
+  "DeltaLast":"Zuletzt",
+  "Delta15":"15 Min",
   "Compte":"Konto",
   "Display":"Anzeige",
   "Infos":"Informationen",

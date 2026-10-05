@@ -3,6 +3,8 @@ inline const char *LangES = R"====(
 {
   "Age":"Edad",
   "AgeGlyc":"Edad de la glucemia",
+  "DeltaLast":"Último",
+  "Delta15":"15 min",
   "Compte":"Cuenta",
   "Display":"Pantalla",
   "Infos":"Información",
