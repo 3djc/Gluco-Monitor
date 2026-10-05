@@ -35,7 +35,7 @@ const char *alphaKeys[4][10] = {
 const char *numKeys[4][10] = {
     {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"},
     {"+", "-", "*", "/", "=", "%", "(", ")", "#", "!"},
-    {".", ",", "?", ";", ":", "'", "\"", "&", "€", "$"},
+    {".", ",", "?", ";", ":", "'", "\"", "&", "^", "$"},
     {"ABC", "SPACE", "DEL", ".com", "Cancel", "OK", "", "", "", ""}};
 
 void Position(int row, int col, int &x, int &y, int &keyWidth, int &keyHeight);
