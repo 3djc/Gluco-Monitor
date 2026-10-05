@@ -23,6 +23,7 @@
 void setup();
 void loop();
 extern int8_t rotation;           // Ecran/Gestion.cpp
+extern int16_t PageActu;          // Ecran/Gestion.cpp
 extern int sim_glucose_offset;    // sim_data.cpp
 extern bool sim_force_reading;    // sim_data.cpp
 
@@ -155,12 +156,30 @@ static uint32_t g_releaseAt = 0; // a tap is held for a minimum time: the firmwa
 static int g_touchX = 0, g_touchY = 0; // in the logical (rotated) screen coordinates
 static bool g_debugInput = false;
 
+// The firmware recognises a swipe as >50 px (pages) / >10 px (fixed pages) of movement between two
+// touch polls 20 ms apart - a fast finger flick. A mouse drag is far slower, so drags are amplified
+// beyond a small dead zone (taps with a little jitter stay taps), and the arrow keys inject a flick.
+static const int DRAG_DEADZONE = 12;
+static const int DRAG_GAIN = 6;
+static int g_anchorX = 0, g_anchorY = 0;
+static int g_flickDx = 0, g_flickDy = 0;
+static uint32_t g_flickAt = 0;
+
+static int16_t g_releasePage = 0;
 static void touchRelease()
 {
     g_touchDown = false;
-    g_releaseAt = SDL_GetTicks() + 80;
+    g_releasePage = PageActu;
+    // The settings menu (page 1) only reacts to a press held > 300 ms; elsewhere 80 ms is enough.
+    g_releaseAt = SDL_GetTicks() + (PageActu == 1 ? 340 : 80);
 }
-static bool touchActive() { return g_touchDown || SDL_GetTicks() < g_releaseAt; }
+static bool touchActive()
+{
+    if (g_touchDown)
+        return true;
+    // Don't let the held-over tap fall through onto the next page after a navigation.
+    return SDL_GetTicks() < g_releaseAt && PageActu == g_releasePage;
+}
 
 struct ScriptEvent
 {
@@ -194,10 +213,55 @@ static void parseScript(const std::string &s)
     }
 }
 
+static void startFlick(int dx, int dy)
+{
+    g_flickDx = dx;
+    g_flickDy = dy;
+    g_flickAt = SDL_GetTicks() ? SDL_GetTicks() : 1;
+}
+
+static void updateFlick()
+{
+    if (!g_flickAt)
+        return;
+    int vw, vh;
+    viewSize(vw, vh);
+    uint32_t t = SDL_GetTicks() - g_flickAt;
+    if (t < 40) // finger lands in the middle...
+    {
+        g_touchX = vw / 2;
+        g_touchY = vh / 2;
+        g_touchDown = true;
+    }
+    else if (t < 100) // ...and moves quickly
+    {
+        g_touchX = vw / 2 + g_flickDx;
+        g_touchY = vh / 2 + g_flickDy;
+        g_touchDown = true;
+    }
+    else
+    {
+        g_flickAt = 0;
+        touchRelease();
+    }
+}
+
 static void handleKey(SDL_Keycode k)
 {
     switch (k)
     {
+    case SDLK_RIGHT: // next page (finger moves left); on sub-pages: back to the settings menu
+        startFlick(-100, 0);
+        break;
+    case SDLK_LEFT:
+        startFlick(100, 0);
+        break;
+    case SDLK_PAGEDOWN: // scroll content up
+        startFlick(0, -45);
+        break;
+    case SDLK_PAGEUP:
+        startFlick(0, 45);
+        break;
     case SDLK_UP:
         sim_glucose_offset += 10;
         sim_force_reading = true;
@@ -239,6 +303,34 @@ static void runScript()
         }
         else if (ev.action == "up")
             touchRelease();
+        else if (ev.action == "mdown" || ev.action == "mmove" || ev.action == "mup")
+        {
+            // Pushes a genuine SDL mouse event (screen coords scaled to window coords): exercises the
+            // same path as a real mouse. Needs a window, e.g. SDL_VIDEODRIVER=dummy.
+            int x = 0, y = 0;
+            sscanf(ev.arg.c_str(), "%d,%d", &x, &y);
+            int vw, vh, ww = 0, wh = 0;
+            viewSize(vw, vh);
+            if (g_window)
+                SDL_GetWindowSize(g_window, &ww, &wh);
+            SDL_Event se;
+            memset(&se, 0, sizeof(se));
+            int wx = ww ? x * ww / vw : x, wy = wh ? y * wh / vh : y;
+            if (ev.action == "mmove")
+            {
+                se.type = SDL_MOUSEMOTION;
+                se.motion.x = wx;
+                se.motion.y = wy;
+            }
+            else
+            {
+                se.type = ev.action == "mdown" ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
+                se.button.button = SDL_BUTTON_LEFT;
+                se.button.x = wx;
+                se.button.y = wy;
+            }
+            SDL_PushEvent(&se);
+        }
         else if (ev.action == "shot")
         {
             if (g_dirty)
@@ -250,6 +342,10 @@ static void runScript()
             if (ev.arg == "up") handleKey(SDLK_UP);
             else if (ev.arg == "down") handleKey(SDLK_DOWN);
             else if (ev.arg == "home") handleKey(SDLK_HOME);
+            else if (ev.arg == "left") handleKey(SDLK_LEFT);
+            else if (ev.arg == "right") handleKey(SDLK_RIGHT);
+            else if (ev.arg == "pageup") handleKey(SDLK_PAGEUP);
+            else if (ev.arg == "pagedown") handleKey(SDLK_PAGEDOWN);
         }
         else if (ev.action == "quit")
             exit(0);
@@ -285,7 +381,9 @@ static void pump()
             case SDL_MOUSEBUTTONDOWN:
                 if (e.button.button == SDL_BUTTON_LEFT)
                 {
-                    toLogical(e.button.x, e.button.y, g_touchX, g_touchY);
+                    toLogical(e.button.x, e.button.y, g_anchorX, g_anchorY);
+                    g_touchX = g_anchorX;
+                    g_touchY = g_anchorY;
                     g_touchDown = true;
                     if (g_debugInput)
                         fprintf(stderr, "[sim] mouse down window=(%d,%d) screen=(%d,%d)\n", e.button.x, e.button.y, g_touchX, g_touchY);
@@ -300,8 +398,19 @@ static void pump()
                 }
                 break;
             case SDL_MOUSEMOTION:
-                if (g_touchDown)
-                    toLogical(e.motion.x, e.motion.y, g_touchX, g_touchY);
+                if (g_touchDown && !g_flickAt)
+                {
+                    int mx, my, vw, vh;
+                    toLogical(e.motion.x, e.motion.y, mx, my);
+                    viewSize(vw, vh);
+                    auto amplify = [](int anchor, int now)
+                    {
+                        int d = now - anchor, a = abs(d) - DRAG_DEADZONE;
+                        return a <= 0 ? anchor : anchor + (d < 0 ? -1 : 1) * a * DRAG_GAIN;
+                    };
+                    g_touchX = constrain(amplify(g_anchorX, mx), 0, vw - 1);
+                    g_touchY = constrain(amplify(g_anchorY, my), 0, vh - 1);
+                }
                 break;
             case SDL_KEYDOWN:
                 if (!e.key.repeat)
@@ -311,6 +420,7 @@ static void pump()
         }
     }
     runScript();
+    updateFlick();
     if (g_dirty && SDL_GetTicks() - g_lastPresent >= 16)
         present();
 }
@@ -588,7 +698,7 @@ int main(int argc, char **argv)
             g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_SOFTWARE);
         SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
         SDL_RaiseWindow(g_window);
-        fprintf(stderr, "[sim] click/drag = touch/swipe | Up/Down = glucose +/-10 | Home = reset | S = screenshot | R = restart | Q = quit\n");
+        fprintf(stderr, "[sim] click = touch | drag or Left/Right = swipe pages | PgUp/PgDn = scroll | Up/Down = glucose +/-10 | Home = reset | S = screenshot | R = restart | Q = quit\n");
     }
 
     setup();
