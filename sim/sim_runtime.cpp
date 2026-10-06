@@ -36,7 +36,7 @@ static bool g_dirty = true;
 static uint32_t g_backlight = 255;
 
 static bool g_headless = false;
-static int g_scale = 2;
+static int g_scale = 1;
 static SDL_Window *g_window = nullptr;
 static SDL_Renderer *g_renderer = nullptr;
 static SDL_Texture *g_texture = nullptr;
