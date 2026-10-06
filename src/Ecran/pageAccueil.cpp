@@ -82,12 +82,12 @@ void AccueiLoop()
     // HEURE
     if (timeFormat == TIME_FORMAT_12H)
     {
-        CanvaAccueil->setFont(u8g2_font_fub30_tf);
+        CanvaAccueil->setFont(u8g2_font_fub20_tf);
         Yh -= 4;
     }
     else
     {
-        CanvaAccueil->setFont(u8g2_font_fub35_tf);
+        CanvaAccueil->setFont(u8g2_font_fub25_tf);
     }
 
     if (HeureValide)
@@ -348,6 +348,7 @@ void AccueiLoop()
         int16_t W = EcranW - X0;
         int16_t H = EcranH * 0.37;
         int16_t EcranH10 = EcranH - 10;
+        const int GRAPH_MAX = 300; // Echelle verticale du graphique (mg/dL)
         int16_t x, y, last_x;
         int lastHeure = -1;
         unsigned long Tmin = 0, Tmax = 0;
@@ -359,20 +360,21 @@ void AccueiLoop()
 
         for (int c = 0; c < 4; c++) // Trace fond graphique
         {
-            int16_t y2 = EcranH10 - H * seuilCoul[c] / 400;
-            y = EcranH10 - H * seuilCoul[c + 1] / 400;
+            int16_t y2 = EcranH10 - H * min(seuilCoul[c], GRAPH_MAX) / GRAPH_MAX;
+            y = EcranH10 - H * min(seuilCoul[c + 1], GRAPH_MAX) / GRAPH_MAX;
             String Seuil = String(seuilCoul[c + 1]);
             if (glucoseUnit == 1)
             { // mmol/L
                 Seuil = String(float(seuilCoul[c + 1]) / 18.0f, 1);
             }
-            PrintDroite(CanvaAccueil, Seuil, X0, y, 1);
+            if (seuilCoul[c + 1] <= GRAPH_MAX)
+                PrintDroite(CanvaAccueil, Seuil, X0, y, 1);
             CanvaAccueil->fillRect(X0, y, W, y2 - y, CouleursFond[c]);
         }
         for (int i = 0; i < pointCountGly; i++)
         {
             x = X0 + int(DT * float(glucoseHeure[i] - Tmin));
-            y = H * glucoseValues[i] / 400;
+            y = H * min((int)glucoseValues[i], GRAPH_MAX) / GRAPH_MAX;
             for (int c = 0; c < 4; c++)
             {
                 if (glucoseValues[i] > seuilCoul[c])
